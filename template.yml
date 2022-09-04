@@ -18,7 +18,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: Scraping County Data
-      CodeUri: functions/website-finder/
+      CodeUri: scraperFunction/
       Handler: app.lambdaHandler
       Timeout: 10
       MemorySize: 2048 # Chrome will require higher memory

@@ -19,4 +19,4 @@ biCoverage:'10/20',
 uninsuredMotorist:null,homeOwner:false,homeOwnership:"Rent"
 }];
 
-export default users;
+exports.users = users;
