@@ -20,7 +20,7 @@ Resources:
       Description: Scraping County Data
       CodeUri: scraperFunction/
       Handler: app.lambdaHandler
-      Timeout: 10
+      Timeout: 60
       MemorySize: 2048 # Chrome will require higher memory
       Runtime: nodejs14.x
       Layers:
