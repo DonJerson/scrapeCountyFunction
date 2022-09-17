@@ -2,9 +2,9 @@ version = 0.1
 [default]
 [default.deploy]
 [default.deploy.parameters]
-stack_name = "UaigQuoter"
-s3_bucket = "browsersprieto29"
-s3_prefix = "UaigQuoter"
+stack_name = "CountyScraper"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-m9ddeyx3ghio"
+s3_prefix = "CountyScraper"
 region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"

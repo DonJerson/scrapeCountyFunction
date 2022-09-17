@@ -2,6 +2,23 @@ const chromium = require('chrome-aws-lambda');
 const puppeteer = chromium.puppeteer;
 const axios = require('axios'); 
 const finder = require('./Functions/finder.js');
+const AWS = require('aws-sdk');
+let stringified
+// Set the region 
+AWS.config.update({region: 'us-east-1'});
+
+// Create S3 service object
+let s3 = new AWS.S3({apiVersion: '2012-10-17'});
+let randomN = Math.floor(Math.random() * 10000);
+var bucketParams = {Bucket: process.argv[2]};
+AWS.config.getCredentials(function(err) {
+ if (err) {console.log(err.stack);
+ // credentials not loaded
+ console.log("credentials not loaded");}
+ else {
+ console.log("Access key:", AWS.config.credentials.accessKeyId);
+ }
+});
 
 let property
 exports.sleep = (ms) =>{
@@ -71,6 +88,29 @@ exports.getFeatures = async (page,feature,searchTerm) => {
 
 exports.getFeature = async (page,feature,searchTerm) => {
   let featureVal
+
+  if(searchTerm && searchTerm.includes('//')){
+    let featureEls = await page.$x(searchTerm);
+    for (let i = 0; i < featureEls.length; i++) {
+      const element = featureEls[i];
+      const elementText = (await element.getProperty('textContent'))._remoteObject.value
+      if(elementText.length<500){
+        let field = (await element.getProperty('textContent'))._remoteObject.value.replace(/^\s*$(?:\r\n?|\n)/gm, "").replace(/\s+/g, "")
+        try {
+          if(field.includes(':')){
+          featureVal = field.split(':')[1]
+          }else{
+            featureVal = field
+          }
+        } catch (error) {
+          console.log("bobito porch")
+        }
+      
+        console.log('found '+feature+' '+featureVal)
+        return featureVal
+    }
+    }
+  }else{
   console.log("searching for "+feature)
   let featureEls = await page.$x(`//div[contains(.,'${searchTerm}')]`);
   let featureTds = await page.$x(`//tr[contains(.,'${searchTerm}')]`);
@@ -98,50 +138,8 @@ exports.getFeature = async (page,feature,searchTerm) => {
     return featureVal
   }
   }
-  // if (featureEls.length > 0) {
-  // for (let i = 0; i < featureEls.length; i++) {
-  //   const element = featureEls[i];
-  //   const elementText = (await element.getProperty('textContent'))._remoteObject.value
-  //   if(elementText.includes(searchTerm) && elementText.length<500){
-  //     let field = (await element.getProperty('textContent'))._remoteObject.value.replace(/^\s*$(?:\r\n?|\n)/gm, "").replace(/\s+/g, "")
-  //     try {
-  //       if(field.includes(':')){
-  //       featureVal = field.split(':')[1]
-  //       }else{
-  //         featureVal = field
-  //       }
-  //     } catch (error) {
-  //       console.log("bobito porch")
-  //     }
-    
-  //     console.log('found '+feature+' '+featureVal)
-  //     return featureVal
-  // }
-  // }
-  // }else{
-  //   for (let i = 0; i < featureTds.length; i++) {
-  //     const element = featureTds[i];
-  //     const elementText = (await element.getProperty('textContent'))._remoteObject.value
-      
-  //     if(elementText.includes(searchTerm) && elementText.length<500){
-  //       let field = (await element.getProperty('textContent'))._remoteObject.value.replace(/^\s*$(?:\r\n?|\n)/gm, "").replace(/\s+/g, "")
-  //       try {
-  //         if(field.includes(':')){
-  //         featureVal = field.split(':')[1]
-  //         }else{
-  //           featureVal = field
-  //         }
-  //         console.log('found '+feature+' '+featureVal)
-  //       } catch (error) {
-  //         console.log("bobito porch")
-  //       }
-      
-        
-  //       return featureVal
-  //   }else{
-  //   }
-  //   }
-  // }
+}
+
   return featureVal
 }
 
@@ -237,11 +235,93 @@ exports.findNode = async (page, selector) => {
 //Create a function that finds the nearest input element to the given node
 //find x and y distance between two nodes
 
+exports.checkValue = async (page,element) => {
+  const val = await page.evaluate(x => x.value, element)
+  return val
+}
+
 exports.findElements = async (page, selector) => {
   const elements = await page.$x(`//*[contains(text(),"${selector}")]`);
   console.log(elements.length,"elements length")
   return elements;
 }
+
+exports.action = async (page,type,value,path) => {
+  try {
+    switch (type) {
+      case 'click':
+        if(path.includes('$')){
+          let element = await exports.findElements(page,value);
+          // await clickAll(element);
+          await element[0].click();
+          console.log(" hay obo?")
+        }else if(path.includes('//')){
+          
+          await page.waitForXPath(path);
+          let element = await page.$x(path);
+          await element[0].click();
+        
+      }else{
+        await page.waitForSelector(path);
+          let element = await page.$(path);
+          await element.click();
+        }
+        break;
+      case 'type':
+
+        if(path.includes('$')){
+          let element = await exports.findElements(page,value);
+          await element.click();
+          let val = await exports.checkValue(page,element)
+          if(val.length>0){
+            for (let i = 0; i < val.length; i++) {
+              await page.keyboard.press('Backspace');
+            }
+          }
+          await page.keyboard.type(value);
+          //await networkidle0
+          await sleep(1500);
+        }else if(path.includes('//')){
+          await page.waitForXPath(path);
+          let element = await page.$x(path);
+          await element[0].click();
+          let val = await exports.checkValue(page,element[0])
+          if(val.length>0){
+            for (let i = 0; i < val.length; i++) {
+              await page.keyboard.press('Backspace');
+            }
+          }
+          await page.keyboard.type(value);
+          //await networkidle0
+          await sleep(1500);
+        }
+        else{
+          await page.waitForSelector(path);
+          let element = await page.$(path);
+          let val = await exports.checkValue(page,element)
+          if(val.length>0){
+            for (let i = 0; i < val.length; i++) {
+              await page.keyboard.press('Backspace');
+            
+            }
+          }
+          await element.click();
+          await page.keyboard.type(value);
+          await exports.sleep(1500);
+        }
+        break;
+      default:
+        break;
+    }
+  } catch (error) {
+    console.log(error);
+  }
+  
+
+  //print to screen that action was executed
+  console.log(type,path,value);
+}
+
 exports.findInput = async (page, keyWord) => {
   const inputs = await page.$x('//input');
   let distance = 0;
@@ -362,6 +442,7 @@ exports.searchAddress = async (page, address) => {
   // //filter out hidden inputs
   
   // await recordSearch[0].click();
+  await page.waitFor(1000);
   let propertySearch = await page.$x('//input');
   //filter out hidden inputs
   propertySearch = await propertySearch.filter(async (input) => {
@@ -403,7 +484,7 @@ exports.searchAddress = async (page, address) => {
   exports.searchAddress2 = async (page, address) => {
 
     //const els = await findElements(page,'Address')
-    const addressInput =await findInput(page,'Address')
+    const addressInput = await exports.findInput(page,'Address')
     await addressInput.click()
     // press TAB
     await page.keyboard.press('Tab');
@@ -411,7 +492,7 @@ exports.searchAddress = async (page, address) => {
     await page.keyboard.type(address);
     await page.keyboard.press('Enter');
     await sleep(2000)
-    const el =await findEl(page,'td',address.toUpperCase(),100)
+    const el =await exports.findEl(page,'td',address.toUpperCase(),100)
     //run js script
     await page.evaluate(function(){
 
@@ -507,9 +588,9 @@ exports.getCountyIndex=(countyName)=>{
 exports.getCounty = async (county,token) => {
   let countyStructure
 
-  try {
+  if(token){
     axios.defaults.headers.post['Authorization'] = 'JWT ' + token;
-  } catch (error) {
+  }else{
       await axios.post('https://backends.smartrater.us/token-auth/', {username:"donjerson",password:"W3lcome77"})
     .then(function (response) {
       console.log(response.data.token);
@@ -595,20 +676,43 @@ exports.lambdaHandler = async (event, context) => {
         await sleep(500);
       }else{console.log("already on page");};
       
-    //await finder.searchAddress(page,address);
-    var instructions = countyStructure.searchFunction
-    const countyIndex=exports.getCountyIndex(county)
-    //eval('finder.searchAddress'+countyIndex+'(page, address)');
-    await eval(countyIndex);
-    
-    await sleep(500);
-    console.log(countyStructure['use'],"countyStructure")
-    
-    property=await exports.run(defaultCounty.attributes,page,countyStructure);
-    await sleep(100);
-    console.log(property,"propertyx");
-    
-    //end timer
+      let actionsString = countyStructure.searchFunction
+      let countyIndex=exports.getCountyIndex(county)
+      //eval('finder.searchAddress'+countyIndex+'(page, address)');
+      // await eval(countyIndex);
+      
+      
+      
+      
+      
+      //actionsString = 'click:AddressButton:#MCPAMaster_MCPAContent_rblSearchBy_0,type:address:#MCPAMaster_MCPAContent_txtParm,click:Search:#MCPAMaster_MCPAContent_btnWine,click:parcel://*[@id="srch"]/table[1]/tbody/tr/td[1]/a'
+      
+      let actions = actionsString.split(',');
+      for (let i = 0; i < actions.length; i++) {
+        let actionString = actions[i].split(':');
+        let type = actionString[0];
+        let path = actionString[2];
+        let value = actionString[1];
+        if(value=="address"){
+          console.log(address.toUpperCase(),"address",type)
+          value=address.toUpperCase()
+        }
+        await exports.action(page,type,value,path);
+        await exports.sleep(500);
+      }
+      console.log(countyStructure['use'],"countyStructure")
+      let property=await exports.run(defaultCounty.attributes,page,countyStructure);
+      await sleep(100);
+      stringified=await JSON.stringify(property)
+      console.log(stringified,"propertyx");
+
+     await s3.putObject({
+        Bucket: 'myopenucket29/screenshots',
+        Key: `result_${randomN + 1}.png`,
+        Body: await page.screenshot(),
+        ContentType: 'image/png',
+      }).promise();
+
     const end = new Date();
     const time = end - start;
     console.log(time/1000,"seg County scraping time");
@@ -617,6 +721,7 @@ exports.lambdaHandler = async (event, context) => {
   console.log("errrorrr",e)
 }finally {
   await browser.close();
-  return (JSON.stringify(property))
+  return ('Y entonce mmg',stringified);
+  //await JSON.stringify(property);
 }
 };
